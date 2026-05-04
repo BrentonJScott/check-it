@@ -4,7 +4,6 @@ import type {
   Settings,
 } from "../../types/checkIt";
 import { HydrationProgressCard } from "./HydrationProgressCard";
-import { QuickLogsCard } from "./QuickLogsCard";
 import { WaterHeroCard } from "./WaterHeroCard";
 import { WaterIntentionRemindersSection } from "./WaterIntentionRemindersSection";
 
@@ -36,7 +35,7 @@ type WaterTrackViewProps = {
   onStopWater: () => void;
 };
 
-/** Hydration layout: hero + tank, merged intention/reminders (like posture pacing), quick logs. */
+/** Hydration layout: hero + tank, merged intention/reminders (like posture pacing). */
 export function WaterTrackView({
   settings,
   setSettings,
@@ -79,7 +78,8 @@ export function WaterTrackView({
           percent={hydrationPercent}
           consumedMl={consumedMl}
           goalMl={dailyGoalMl}
-          onFabClick={() => onAddWater(250)}
+          addAmountMl={sipHintMl}
+          onFabClick={() => onAddWater(sipHintMl)}
           onReduceWater={onReduceWater}
           onResetWater={onResetWater}
         />
@@ -101,13 +101,6 @@ export function WaterTrackView({
         onStartWater={onStartWater}
         onStopWater={onStopWater}
       />
-
-      <div className="water-bottom-row water-bottom-row--single">
-        <QuickLogsCard
-          onLog250={() => onAddWater(250)}
-          onLog500={() => onAddWater(500)}
-        />
-      </div>
     </div>
   );
 }

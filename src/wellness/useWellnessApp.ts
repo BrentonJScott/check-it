@@ -264,6 +264,11 @@ export function useWellnessApp() {
     setConsumedMl((c) => c + n);
   }
 
+  function acknowledgeWaterReminder() {
+    addWaterMl(sipHintMl);
+    water.acknowledgeReminder();
+  }
+
   function reduceWaterMl(amountMl: number) {
     const n = Math.max(0, amountMl);
     if (n === 0) {
@@ -316,7 +321,7 @@ export function useWellnessApp() {
     waterNextReminderAt: water.nextReminderAt,
     waterIsAlertOpen: water.isAlertDialogOpen,
     waterActiveReminderLabel: water.activeReminderLabel,
-    acknowledgeWaterReminder: water.acknowledgeReminder,
+    acknowledgeWaterReminder,
     startWaterReminders: waterStartWithAudio,
     stopWaterReminders: water.stopReminders,
     consumedMl,

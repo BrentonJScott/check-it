@@ -4,6 +4,8 @@ type HydrationProgressCardProps = {
   percent: number;
   consumedMl: number;
   goalMl: number;
+  /** Millilitres added when the tank FAB is pressed (matches reminder sip size). */
+  addAmountMl: number;
   onFabClick: () => void;
   onReduceWater: (ml: number) => void;
   onResetWater: () => void;
@@ -28,12 +30,15 @@ export function HydrationProgressCard({
   percent,
   consumedMl,
   goalMl,
+  addAmountMl,
   onFabClick,
   onReduceWater,
   onResetWater,
 }: HydrationProgressCardProps) {
   const fillPercent = Math.min(100, Math.max(0, percent));
   const hasLogged = consumedMl > 0;
+  const addLabel = `+${Math.round(addAmountMl)}ml`;
+  const addAria = `Add ${Math.round(addAmountMl)} millilitres`;
 
   return (
     <section
@@ -66,9 +71,9 @@ export function HydrationProgressCard({
           type="button"
           className="hydration-card__quick-add"
           onClick={onFabClick}
-          aria-label="Add 250 millilitres">
+          aria-label={addAria}>
           <HydrationGlassIcon />
-          <span className="hydration-card__quick-add-label">+250ml</span>
+          <span className="hydration-card__quick-add-label">{addLabel}</span>
         </button>
       </div>
 

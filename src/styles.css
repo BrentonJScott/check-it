@@ -964,34 +964,9 @@ body {
   color: #8a3d32;
 }
 
-.water-bottom-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  align-items: stretch;
-}
-
-@media (max-width: 720px) {
-  .water-bottom-row {
-    grid-template-columns: 1fr;
-  }
-}
-
-.water-bottom-row--single {
-  grid-template-columns: 1fr;
-}
-
 .water-intention-card-body {
   margin-top: 18px;
   margin-bottom: 2px;
-}
-
-.quick-logs-card {
-  background: var(--color-surface);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  border: 1px solid color-mix(in srgb, var(--color-tertiary) 32%, transparent);
-  padding: 20px 18px 18px;
 }
 
 .intention-card__head {
@@ -1001,8 +976,7 @@ body {
   margin-bottom: 14px;
 }
 
-.intention-card__title,
-.quick-logs-card__title {
+.intention-card__title {
   margin: 0;
   font-size: 1rem;
   font-weight: 700;
@@ -1103,50 +1077,4 @@ body {
 
 .intention-card__hint strong {
   color: var(--color-text);
-}
-
-.quick-logs-card__actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.quick-log-btn {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 16px 16px;
-  border-radius: var(--radius-md);
-  border: 1px solid color-mix(in srgb, var(--color-tertiary) 40%, transparent);
-  background: var(--color-neutral);
-  font-family: inherit;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--color-text);
-  cursor: pointer;
-  text-align: left;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
-}
-
-.quick-log-btn:hover {
-  background: var(--color-surface);
-  border-color: var(--color-primary);
-}
-
-.quick-log-btn__icon {
-  display: grid;
-  place-items: center;
-  color: var(--color-text-muted);
-}
-
-.quick-logs-card__quote {
-  margin: 16px 0 0;
-  font-size: 0.82rem;
-  font-style: italic;
-  color: var(--color-text-muted);
-  text-align: center;
 }

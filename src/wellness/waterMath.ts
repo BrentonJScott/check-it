@@ -45,18 +45,14 @@ export function suggestedSipMl(
   return Math.round(goalMl / slots);
 }
 
-export function hydrationProgressRatio(consumedMl: number, goalMl: number): number {
-  if (goalMl <= 0) {
-    return 0;
-  }
-  return Math.min(1, consumedMl / goalMl);
-}
-
 export function hydrationPercentDisplay(
   consumedMl: number,
   goalMl: number,
 ): number {
-  return Math.round(hydrationProgressRatio(consumedMl, goalMl) * 100);
+  if (goalMl <= 0) {
+    return 0;
+  }
+  return Math.round((consumedMl / goalMl) * 100);
 }
 
 /**

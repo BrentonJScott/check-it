@@ -19,10 +19,19 @@ export function WaterHeroCard({
   onNotificationClick,
 }: WaterHeroCardProps) {
   return (
-    <section className="water-hero-card" aria-labelledby="water-hero-heading">
+    <section
+      className="water-hero-card"
+      aria-labelledby="water-hero-heading">
       <div className="timer-ring-wrap water-hero-card__ring">
-        <svg viewBox="0 0 120 120" aria-hidden={true}>
-          <circle className="timer-ring__track" cx="60" cy="60" r={RING_RADIUS} />
+        <svg
+          viewBox="0 0 120 120"
+          aria-hidden={true}>
+          <circle
+            className="timer-ring__track"
+            cx="60"
+            cy="60"
+            r={RING_RADIUS}
+          />
           <circle
             className="timer-ring__progress"
             cx="60"
@@ -38,16 +47,20 @@ export function WaterHeroCard({
         </div>
       </div>
 
-      <p id="water-hero-heading" className="water-hero-card__quote">
-        Steady progress, mindfully.
+      <h2
+        id="hero-heading"
+        className="hero-title">
+        Stay hydrated.
+      </h2>
+      <p className="hero-sub">
+        Your next drink is just around the corner.
       </p>
 
       <button
         type="button"
         className={heroButtonClass}
         onClick={onNotificationClick}
-        disabled={heroButtonDisabled}
-      >
+        disabled={heroButtonDisabled}>
         <svg
           viewBox="0 0 24 24"
           fill="none"
@@ -55,8 +68,7 @@ export function WaterHeroCard({
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          aria-hidden={true}
-        >
+          aria-hidden={true}>
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
