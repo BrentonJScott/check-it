@@ -1,3 +1,5 @@
+import { LiquidFill } from "./LiquidFill";
+
 type HydrationProgressCardProps = {
   percent: number;
   consumedMl: number;
@@ -52,10 +54,13 @@ export function HydrationProgressCard({
       </div>
 
       <div className="hydration-card__tank">
-        <div
+        <LiquidFill
           className="hydration-card__fill"
-          style={{ height: `${fillPercent}%` }}
-          aria-hidden={true}
+          fill={fillPercent}
+          color="#5eb0e0"
+          waveIntensity={1.05}
+          speed={1}
+          interactive={true}
         />
         <button
           type="button"

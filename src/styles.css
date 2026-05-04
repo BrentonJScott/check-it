@@ -787,21 +787,40 @@ body {
   border: 1px solid color-mix(in srgb, #6ba8d6 35%, transparent);
 }
 
-.hydration-card__fill {
+.liquid-fill {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.liquid-fill__body {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, #6ba8d6 55%, white) 0%,
-    #6ba8d6 100%
-  );
-  transition: height 0.45s ease;
+  width: 100%;
+  overflow: visible;
+  border-radius: inherit;
+  background: transparent;
+}
+
+.liquid-fill__body[data-interactive="true"] {
+  pointer-events: auto;
+}
+
+.liquid-fill__canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
   pointer-events: none;
 }
 
 .hydration-card__quick-add {
+  z-index: 2;
   position: absolute;
   right: 14px;
   bottom: 14px;
