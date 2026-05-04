@@ -626,3 +626,508 @@ body {
   font-size: 0.9rem;
   color: var(--color-text-muted);
 }
+
+/* --- Multi-track wellness (posture + hydration) --- */
+.page.page--wide {
+  --max-content: 960px;
+}
+
+.page__nav-wrap {
+  width: 100%;
+  max-width: var(--max-content);
+  margin: 0 auto 6px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.wellness-nav {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0 10px;
+}
+
+.wellness-nav__btn {
+  flex: 1;
+  max-width: 200px;
+  padding: 10px 16px;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--color-tertiary) 45%, transparent);
+  background: var(--color-surface);
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.wellness-nav__btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-text);
+}
+
+.wellness-nav__btn--active {
+  background: var(--color-forest);
+  color: var(--color-surface);
+  border-color: var(--color-forest);
+}
+
+.wellness-nav__btn:focus-visible {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: 2px;
+}
+
+.track-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.pacing-section__hint {
+  margin: -8px 0 18px;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.water-top-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+
+@media (max-width: 720px) {
+  .water-top-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.water-hero-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  border: 1px solid color-mix(in srgb, var(--color-tertiary) 35%, transparent);
+  padding: 26px 22px 24px;
+  text-align: center;
+}
+
+.water-hero-card__ring {
+  margin-bottom: 16px;
+}
+
+.water-hero-card__quote {
+  margin: 0 0 20px;
+  font-size: 0.95rem;
+  font-style: italic;
+  color: var(--color-text-muted);
+}
+
+.hydration-card {
+  position: relative;
+  background: var(--color-surface);
+  border-radius: 28px;
+  box-shadow: var(--shadow-card);
+  border: 1px solid color-mix(in srgb, var(--color-tertiary) 30%, transparent);
+  padding: 22px 20px 20px;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+}
+
+.hydration-card__header {
+  margin-bottom: 12px;
+}
+
+.hydration-card__stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.hydration-card__percent {
+  font-size: 2.5rem;
+  font-weight: 200;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--color-text);
+}
+
+.hydration-card__sub {
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.hydration-card__tank {
+  position: relative;
+  flex: 1;
+  min-height: 160px;
+  border-radius: 20px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, #6ba8d6 18%, var(--color-neutral)) 0%,
+    var(--color-neutral) 100%
+  );
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, #6ba8d6 35%, transparent);
+}
+
+.hydration-card__fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, #6ba8d6 55%, white) 0%,
+    #6ba8d6 100%
+  );
+  transition: height 0.45s ease;
+  pointer-events: none;
+}
+
+.hydration-card__quick-add {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 10px 12px;
+  border-radius: var(--radius-pill);
+  border: none;
+  background: var(--color-forest);
+  color: var(--color-surface);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(44, 64, 54, 0.35);
+  transition:
+    transform 0.12s ease,
+    background 0.15s ease;
+}
+
+.hydration-card__quick-add:hover {
+  transform: scale(1.03);
+  background: var(--color-forest-hover);
+}
+
+.hydration-card__quick-add:focus-visible {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: 3px;
+}
+
+.hydration-glass-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  font-family: "Material Symbols Outlined", sans-serif;
+  font-size: 1.125rem;
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 400,
+    "GRAD" 0,
+    "opsz" 24;
+}
+
+.hydration-glass-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.hydration-card__quick-add .hydration-glass-icon {
+  color: var(--color-surface);
+}
+
+.hydration-card__quick-add-label {
+  line-height: 1;
+}
+
+.hydration-card__adjust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.hydration-card__adjust-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--color-tertiary) 45%, transparent);
+  background: var(--color-neutral);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.hydration-card__adjust-btn:hover:not(:disabled) {
+  background: var(--color-surface);
+  border-color: var(--color-primary);
+}
+
+.hydration-card__adjust-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.hydration-card__adjust-btn .hydration-glass-icon {
+  color: var(--color-text-muted);
+}
+
+.hydration-card__adjust-btn:hover:not(:disabled) .hydration-glass-icon {
+  color: var(--color-text);
+}
+
+.hydration-card__adjust-btn--reduce {
+  color: #6f4540;
+  border-color: color-mix(in srgb, #b85c52 26%, var(--color-tertiary) 74%);
+}
+
+.hydration-card__adjust-btn--reduce .hydration-glass-icon {
+  color: color-mix(in srgb, #9a5a52 58%, var(--color-text-muted));
+}
+
+.hydration-card__adjust-btn--reduce:hover:not(:disabled) {
+  background: color-mix(in srgb, #c45c4a 8%, var(--color-surface));
+  border-color: color-mix(in srgb, #b85c52 40%, var(--color-tertiary));
+  color: #5a2f29;
+}
+
+.hydration-card__adjust-btn--reduce:hover:not(:disabled) .hydration-glass-icon {
+  color: #7f3d36;
+}
+
+.hydration-card__adjust-btn--reset {
+  flex: 1 1 100%;
+  color: var(--color-text-muted);
+  border-color: color-mix(in srgb, var(--color-tertiary) 55%, transparent);
+}
+
+.hydration-card__adjust-btn--reset:hover:not(:disabled) {
+  border-color: color-mix(in srgb, #c45c4a 45%, var(--color-tertiary));
+  color: #8a3d32;
+}
+
+.water-bottom-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+
+@media (max-width: 720px) {
+  .water-bottom-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.water-bottom-row--single {
+  grid-template-columns: 1fr;
+}
+
+.water-intention-card-body {
+  margin-top: 18px;
+  margin-bottom: 2px;
+}
+
+.quick-logs-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  border: 1px solid color-mix(in srgb, var(--color-tertiary) 32%, transparent);
+  padding: 20px 18px 18px;
+}
+
+.intention-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.intention-card__title,
+.quick-logs-card__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.intention-card__edit {
+  border: none;
+  background: color-mix(in srgb, var(--color-tertiary) 18%, transparent);
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  color: var(--color-text-muted);
+  display: grid;
+  place-items: center;
+}
+
+.intention-card__edit:hover {
+  color: var(--color-text);
+}
+
+.intention-card__goal-box {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--color-pacing-shell);
+  border: 1px solid color-mix(in srgb, var(--color-tertiary) 35%, transparent);
+  margin-bottom: 14px;
+}
+
+.intention-card__goal-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  font-family: "Material Symbols Outlined", sans-serif;
+  font-size: 1.5rem;
+  font-weight: normal;
+  line-height: 1;
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 400,
+    "GRAD" 0,
+    "opsz" 24;
+  color: color-mix(in srgb, #6ba8d6 72%, var(--color-text-muted));
+}
+
+.intention-card__goal-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.intention-card__goal-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.intention-card__goal-edit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.intention-card__goal-edit input {
+  width: 100px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--color-tertiary) 45%, transparent);
+  font-family: inherit;
+  font-weight: 600;
+}
+
+.intention-card__goal-unit {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.intention-card__hint {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, #6ba8d6 14%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, #6ba8d6 28%, transparent);
+}
+
+.intention-card__hint strong {
+  color: var(--color-text);
+}
+
+.quick-logs-card__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.quick-log-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 16px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--color-tertiary) 40%, transparent);
+  background: var(--color-neutral);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.quick-log-btn:hover {
+  background: var(--color-surface);
+  border-color: var(--color-primary);
+}
+
+.quick-log-btn__icon {
+  display: grid;
+  place-items: center;
+  color: var(--color-text-muted);
+}
+
+.quick-logs-card__quote {
+  margin: 16px 0 0;
+  font-size: 0.82rem;
+  font-style: italic;
+  color: var(--color-text-muted);
+  text-align: center;
+}

@@ -1,20 +1,16 @@
 import {
   startTransition,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { INTERVAL_OPTIONS, RING_CIRCUMFERENCE } from "../constants";
+import { RING_CIRCUMFERENCE } from "../constants";
 import { POSTURE_VIDEO_CLIPS, nextVideoIndex } from "../data/postureVideos";
 import { AlertSoundSession } from "../lib/alertSoundSession";
 import { formatCountdown } from "../lib/formatCountdown";
-import {
-  INITIAL_PERSISTED,
-  mergeSettingsFromPersist,
-  writePersistedState,
-} from "../lib/persistence";
 import { tryShowPostureCheckNotification } from "../lib/postureNotification";
 import { createUpcomingReminderSchedule } from "../lib/reminderSchedule";
 import type {
@@ -22,34 +18,36 @@ import type {
   PostureVideoClip,
   Settings,
 } from "../types/checkIt";
+import type { PosturePersistSlice } from "./wellnessTypes";
+import { collectPendingReminderIso } from "./reminderPersistUtils";
 
-export function useCheckItState() {
-  const [settings, setSettings] = useState<Settings>(() =>
-    mergeSettingsFromPersist(INITIAL_PERSISTED?.settings),
-  );
-  const [permissionStatus, setPermissionStatus] =
-    useState<NotificationPermissionState>(
-      typeof Notification === "undefined"
-        ? "unsupported"
-        : Notification.permission,
-    );
-  const [notifyEnabled, setNotifyEnabled] = useState(
-    () => INITIAL_PERSISTED?.notifyEnabled !== false,
-  );
-  const [isRunning, setIsRunning] = useState(false);
+type PermissionGetter = () => NotificationPermissionState;
+type NotifyGetter = () => boolean;
+
+export type UsePostureReminderEngineArgs = {
+  settings: Settings;
+  initial: PosturePersistSlice;
+  getPermission: PermissionGetter;
+  getNotifyEnabled: NotifyGetter;
+};
+
+/**
+ * Posture reminders: countdown ring, queue inside the active window, dialog + sound.
+ * Persistence is handled by the parent `useWellnessApp` hook.
+ */
+export function usePostureReminderEngine({
+  settings,
+  initial,
+  getPermission,
+  getNotifyEnabled,
+}: UsePostureReminderEngineArgs) {
+  const [isRunning, setIsRunning] = useState(initial.isRunning);
   const [upcomingCount, setUpcomingCount] = useState(0);
-  const [currentVideoIndex, setCurrentVideoIndex] = useState(() => {
-    const raw = INITIAL_PERSISTED?.currentVideoIndex;
-    if (typeof raw !== "number" || !Number.isFinite(raw)) {
-      return 0;
-    }
-    return Math.min(
-      POSTURE_VIDEO_CLIPS.length - 1,
-      Math.max(0, Math.floor(raw)),
-    );
-  });
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(
+    initial.currentVideoIndex,
+  );
   const [lastReminderTime, setLastReminderTime] = useState<Date | null>(() => {
-    const iso = INITIAL_PERSISTED?.lastReminderTimeIso;
+    const iso = initial.lastReminderTimeIso;
     if (!iso) {
       return null;
     }
@@ -64,15 +62,9 @@ export function useCheckItState() {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
 
-  const permissionRef = useRef(permissionStatus);
-  permissionRef.current = permissionStatus;
-  const notifyEnabledRef = useRef(notifyEnabled);
-  notifyEnabledRef.current = notifyEnabled;
-
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queueRef = useRef<Date[]>([]);
   const soundRef = useRef(new AlertSoundSession());
-  const skipNextPersistRef = useRef(true);
 
   const activeVideo = useMemo(
     () => POSTURE_VIDEO_CLIPS[currentVideoIndex] as PostureVideoClip,
@@ -101,13 +93,6 @@ export function useCheckItState() {
 
   const ringDashOffset = RING_CIRCUMFERENCE * (1 - ringProgress);
 
-  const intervalMinutesNum = Number(settings.intervalMinutes);
-  const intervalSelectValue =
-    Number.isFinite(intervalMinutesNum) &&
-    (INTERVAL_OPTIONS as readonly number[]).includes(intervalMinutesNum)
-      ? String(intervalMinutesNum)
-      : "30";
-
   function clearActiveTimer() {
     if (timerRef.current !== null) {
       clearTimeout(timerRef.current);
@@ -124,10 +109,6 @@ export function useCheckItState() {
     setIsAlertDialogOpen(false);
     setActiveReminderLabel("");
     setIsRunning(false);
-  }
-
-  function stopRepeatingAlertSound() {
-    soundRef.current.stopRepeating();
   }
 
   function startRepeatingAlertSound() {
@@ -202,15 +183,12 @@ export function useCheckItState() {
     setIsAlertDialogOpen(true);
     startRepeatingAlertSound();
 
-    tryShowPostureCheckNotification(
-      permissionRef.current,
-      notifyEnabledRef.current,
-    );
+    tryShowPostureCheckNotification(getPermission(), getNotifyEnabled());
   }
 
   function acknowledgeReminder() {
     void soundRef.current.unlock();
-    stopRepeatingAlertSound();
+    soundRef.current.stopRepeating();
     setIsAlertDialogOpen(false);
     setActiveReminderLabel("");
     scheduleNextReminder();
@@ -230,59 +208,11 @@ export function useCheckItState() {
     scheduleNextReminder();
   }
 
-  function handleNotificationHeroClick() {
-    if (typeof Notification === "undefined") {
-      setPermissionStatus("unsupported");
-      return;
-    }
-
-    if (Notification.permission === "granted") {
-      void soundRef.current.unlock();
-      setNotifyEnabled((prev) => !prev);
-      return;
-    }
-
-    if (Notification.permission === "denied") {
-      return;
-    }
-
-    void Notification.requestPermission().then((permission) => {
-      setPermissionStatus(permission);
-      if (permission === "granted") {
-        void soundRef.current.unlock();
-        setNotifyEnabled(true);
-      }
-    });
-  }
-
-  useEffect(() => {
-    function onVisibilityChange() {
-      if (document.visibilityState === "visible") {
-        soundRef.current.resumeFromUserGesture();
-      }
-    }
-    function onPointerDown() {
-      soundRef.current.resumeFromUserGesture();
-    }
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    window.addEventListener("pointerdown", onPointerDown, {
-      capture: true,
-      passive: true,
-    });
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      window.removeEventListener("pointerdown", onPointerDown, {
-        capture: true,
-      });
-    };
-  }, []);
-
   useLayoutEffect(() => {
-    const p = INITIAL_PERSISTED;
-    if (!p?.isRunning || !p.pendingRemindersIso?.length) {
+    if (!initial.isRunning || !initial.pendingRemindersIso?.length) {
       return;
     }
-    const dates = p.pendingRemindersIso
+    const dates = initial.pendingRemindersIso
       .map((iso) => new Date(iso))
       .filter((d) => !Number.isNaN(d.getTime()) && d.getTime() > Date.now())
       .sort((a, b) => a.getTime() - b.getTime());
@@ -296,50 +226,6 @@ export function useCheckItState() {
     });
     scheduleNextReminder();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only restore
-  }, []);
-
-  useEffect(() => {
-    if (skipNextPersistRef.current) {
-      skipNextPersistRef.current = false;
-      return;
-    }
-    const now = Date.now();
-    const pending: Date[] = [];
-    if (nextReminderAt && nextReminderAt.getTime() > now) {
-      pending.push(nextReminderAt);
-    }
-    for (const d of queueRef.current) {
-      if (d.getTime() > now) {
-        pending.push(d);
-      }
-    }
-    pending.sort((a, b) => a.getTime() - b.getTime());
-    writePersistedState({
-      v: 1,
-      settings,
-      isRunning,
-      pendingRemindersIso: pending.map((d) => d.toISOString()),
-      currentVideoIndex,
-      lastReminderTimeIso: lastReminderTime?.toISOString() ?? null,
-      notifyEnabled,
-    });
-  }, [
-    settings,
-    isRunning,
-    nextReminderAt,
-    currentVideoIndex,
-    lastReminderTime,
-    notifyEnabled,
-  ]);
-
-  useEffect(() => {
-    function syncPermission() {
-      if (typeof Notification !== "undefined") {
-        setPermissionStatus(Notification.permission);
-      }
-    }
-    window.addEventListener("focus", syncPermission);
-    return () => window.removeEventListener("focus", syncPermission);
   }, []);
 
   useEffect(() => {
@@ -364,41 +250,34 @@ export function useCheckItState() {
     };
   }, []);
 
-  const notificationSupported = typeof Notification !== "undefined";
-  const browserDenied = notificationSupported && permissionStatus === "denied";
-  const heroButtonDisabled = !notificationSupported || browserDenied;
-  const heroButtonLabel = !notificationSupported
-    ? "Notifications unavailable"
-    : browserDenied
-      ? "Notifications blocked"
-      : permissionStatus === "granted" && notifyEnabled
-        ? "Mute browser reminders"
-        : "Enable browser reminders";
-  const heroButtonClass =
-    permissionStatus === "granted" && notifyEnabled
-      ? "btn--hero btn--hero-muted"
-      : "btn--hero";
+  const buildPosturePersistSlice = useCallback((): PosturePersistSlice => {
+    return {
+      isRunning,
+      pendingRemindersIso: collectPendingReminderIso(
+        nextReminderAt,
+        queueRef.current,
+      ),
+      currentVideoIndex,
+      lastReminderTimeIso: lastReminderTime?.toISOString() ?? null,
+    };
+  }, [isRunning, nextReminderAt, currentVideoIndex, lastReminderTime]);
 
   return {
-    settings,
-    setSettings,
-    permissionStatus,
-    notifyEnabled,
     isRunning,
     upcomingCount,
-    intervalSelectValue,
+    currentVideoIndex,
+    lastReminderTime,
     activeVideo,
     countdownLabel,
     ringDashOffset,
     isAlertDialogOpen,
     activeReminderLabel,
     nextReminderAt,
-    heroButtonDisabled,
-    heroButtonLabel,
-    heroButtonClass,
     acknowledgeReminder,
     handleStart,
-    handleNotificationHeroClick,
     stopReminders,
+    buildPosturePersistSlice,
+    unlockAudioForUserGesture: () => soundRef.current.unlock(),
+    resumeAudioIfPossible: () => soundRef.current.resumeFromUserGesture(),
   };
 }

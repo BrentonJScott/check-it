@@ -13,4 +13,8 @@ export const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 export const STORAGE_KEY = "check-it-state";
 
-export const NOTIFICATION_TAG = "check-it-posture";
+/** Browser notification tag so posture alerts replace each other instead of stacking. */
+export const POSTURE_NOTIFICATION_TAG = "check-it-posture";
+
+/** Separate tag for hydration reminders. */
+export const WATER_NOTIFICATION_TAG = "check-it-water";

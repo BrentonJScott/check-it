@@ -17,7 +17,7 @@ export function SiteFooter() {
         </a>
       </nav>
       <p className="site-footer__copy">
-        © {new Date().getFullYear()} Check-it · Posture reminders
+        © {new Date().getFullYear()} Check-it · Posture & hydration reminders
       </p>
     </footer>
   );

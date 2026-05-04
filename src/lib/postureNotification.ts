@@ -1,4 +1,4 @@
-import { NOTIFICATION_TAG } from "../constants";
+import { POSTURE_NOTIFICATION_TAG } from "../constants";
 import type { NotificationPermissionState } from "../types/checkIt";
 
 export function tryShowPostureCheckNotification(
@@ -11,6 +11,6 @@ export function tryShowPostureCheckNotification(
   new Notification("Posture check", {
     body: "Time to reset your posture. Dismiss the reminder dialog to continue.",
     silent: false,
-    tag: NOTIFICATION_TAG,
+    tag: POSTURE_NOTIFICATION_TAG,
   });
 }
