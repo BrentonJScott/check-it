@@ -11,10 +11,11 @@ Thank you for helping improve Check-it. This document explains how we prefer to 
 
 1. **Fork and branch**: Create a branch from `main` with a short, descriptive name (for example `fix-countdown-off-by-one` or `add-dark-mode-toggle`).
 2. **Keep changes focused**: One logical change per pull request is easier to review than a mix of unrelated edits.
-3. **Match the codebase**: Follow existing patterns for imports, naming, and component structure in `src/App.jsx` and related files.
+3. **Match the codebase**: Follow existing patterns for imports, naming, and component structure in `src/App.tsx` and related files.
 4. **Verify locally**:
    - `npm install`
-   - `npm run build` (should complete without errors)
+   - `npm run build` (runs `tsc --noEmit` then Vite; should complete without errors)
+   - Optionally `npm run typecheck` if you only changed types and want a quicker check.
    - `npm run start` and manually exercise the flows you touched (start/stop reminders, dialog, notifications if relevant).
 5. **Describe the PR**: Use a clear title and a short description of what changed and why. Link to an issue number if one exists.
 

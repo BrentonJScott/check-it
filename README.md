@@ -1,6 +1,6 @@
 # Check-it
 
-Check-it is a small single-page web app that reminds you to check your posture during a daily work window. It runs in the browser, uses [React](https://react.dev/) for the UI, and [Vite](https://vite.dev/) only as the development server and build tool (no React Router, Redux, or other app frameworks).
+Check-it is a small single-page web app that reminds you to check your posture during a daily work window. It runs in the browser, uses [React](https://react.dev/) and [TypeScript](https://www.typescriptlang.org/) for the UI, and [Vite](https://vite.dev/) only as the development server and build tool (no React Router, Redux, or other app frameworks).
 
 Repository: [https://github.com/BrentonJScott/check-it](https://github.com/BrentonJScott/check-it)
 
@@ -37,15 +37,18 @@ Then open the URL Vite prints (usually [http://localhost:5173/](http://localhost
 | Command | Description |
 | --- | --- |
 | `npm run start` | Start the Vite dev server with hot reload. |
-| `npm run build` | Produce a production build in `dist/`. |
+| `npm run build` | Type-check with `tsc`, then produce a production build in `dist/`. |
 | `npm run preview` | Serve the production build locally for a quick smoke test. |
+| `npm run typecheck` | Run the TypeScript compiler with `--noEmit` only. |
 
 ## Project layout
 
 - `index.html` — HTML shell and root mount point.
-- `src/main.jsx` — React entry (renders `App`).
-- `src/App.jsx` — Reminder logic, notifications, dialog, and video rotation.
+- `src/main.tsx` — React entry (renders `App`).
+- `src/App.tsx` — Reminder logic, notifications, dialog, and video rotation.
 - `src/styles.css` — App styles.
+- `tsconfig.json` — TypeScript compiler options.
+- `src/vite-env.d.ts` — Vite client type references.
 
 ## Browser notes
 

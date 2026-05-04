@@ -1,12 +1,42 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-const DEFAULT_SETTINGS = {
+type Settings = {
+  startTime: string;
+  endTime: string;
+  intervalMinutes: number | string;
+};
+
+type PostureVideoClip = {
+  id: string;
+  title: string;
+  embedUrl: string;
+};
+
+type ScheduleSuccess = {
+  error: null;
+  reminders: Date[];
+  dayStart: Date;
+  dayEnd: Date;
+};
+
+type ScheduleFailure = {
+  error: string;
+  reminders: Date[];
+};
+
+type ScheduleResult = ScheduleSuccess | ScheduleFailure;
+
+type NotificationPermissionState =
+  | NotificationPermission
+  | "unsupported";
+
+const DEFAULT_SETTINGS: Settings = {
   startTime: "08:00",
   endTime: "16:00",
   intervalMinutes: 30,
 };
 
-const POSTURE_VIDEO_CLIPS = [
+const POSTURE_VIDEO_CLIPS: PostureVideoClip[] = [
   {
     id: "neck-reset",
     title: "Neck reset and shoulder release",
@@ -39,7 +69,7 @@ const POSTURE_VIDEO_CLIPS = [
   },
 ];
 
-function parseTimeForDate(timeString, baseDate) {
+function parseTimeForDate(timeString: string, baseDate: Date): Date {
   const [hoursString, minutesString] = timeString.split(":");
   const hours = Number(hoursString);
   const minutes = Number(minutesString);
@@ -50,11 +80,11 @@ function parseTimeForDate(timeString, baseDate) {
 }
 
 function createUpcomingReminderSchedule(
-  fromTime,
-  startTime,
-  endTime,
-  intervalMinutes,
-) {
+  fromTime: Date,
+  startTime: string,
+  endTime: string,
+  intervalMinutes: number | string,
+): ScheduleResult {
   const intervalMs = Number(intervalMinutes) * 60 * 1000;
   if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
     return {
@@ -63,7 +93,6 @@ function createUpcomingReminderSchedule(
     };
   }
 
-  // Scan forward for the first day window that can produce reminders.
   for (let dayOffset = 0; dayOffset < 14; dayOffset += 1) {
     const day = new Date(fromTime);
     day.setHours(0, 0, 0, 0);
@@ -79,7 +108,7 @@ function createUpcomingReminderSchedule(
       };
     }
 
-    let baseTime = dayStart;
+    let baseTime: Date = dayStart;
 
     if (dayOffset === 0) {
       if (fromTime >= dayEnd) {
@@ -94,7 +123,7 @@ function createUpcomingReminderSchedule(
       continue;
     }
 
-    const reminders = [];
+    const reminders: Date[] = [];
     const cursor = new Date(firstReminder);
 
     while (cursor <= dayEnd) {
@@ -111,7 +140,7 @@ function createUpcomingReminderSchedule(
   };
 }
 
-function nextVideoIndex(previousIndex) {
+function nextVideoIndex(previousIndex: number): number {
   if (POSTURE_VIDEO_CLIPS.length <= 1) {
     return 0;
   }
@@ -119,7 +148,7 @@ function nextVideoIndex(previousIndex) {
   return (previousIndex + 1) % POSTURE_VIDEO_CLIPS.length;
 }
 
-function formatCountdown(milliseconds) {
+function formatCountdown(milliseconds: number): string {
   const safeValue = Math.max(0, Math.floor(milliseconds / 1000));
   const hours = Math.floor(safeValue / 3600);
   const minutes = Math.floor((safeValue % 3600) / 60);
@@ -132,30 +161,50 @@ function formatCountdown(milliseconds) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+function getAudioContextConstructor():
+  | (new () => AudioContext)
+  | undefined {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+  if (typeof window.AudioContext !== "undefined") {
+    return window.AudioContext;
+  }
+  const legacy = (
+    window as unknown as { webkitAudioContext?: new () => AudioContext }
+  ).webkitAudioContext;
+  return legacy;
+}
+
 export default function App() {
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-  const [permissionStatus, setPermissionStatus] = useState(
-    typeof Notification === "undefined" ? "unsupported" : Notification.permission,
-  );
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [permissionStatus, setPermissionStatus] =
+    useState<NotificationPermissionState>(
+      typeof Notification === "undefined"
+        ? "unsupported"
+        : Notification.permission,
+    );
   const [isRunning, setIsRunning] = useState(false);
   const [statusMessage, setStatusMessage] = useState(
     "Configure your day, then start reminders.",
   );
   const [upcomingCount, setUpcomingCount] = useState(0);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
-  const [lastReminderTime, setLastReminderTime] = useState(null);
-  const [nextReminderAt, setNextReminderAt] = useState(null);
-  const [nowTick, setNowTick] = useState(Date.now());
+  const [lastReminderTime, setLastReminderTime] = useState<Date | null>(null);
+  const [nextReminderAt, setNextReminderAt] = useState<Date | null>(null);
+  const [nowTick, setNowTick] = useState(() => Date.now());
   const [isAlertDialogOpen, setIsAlertDialogOpen] = useState(false);
   const [activeReminderLabel, setActiveReminderLabel] = useState("");
 
-  const timerRef = useRef(null);
-  const queueRef = useRef([]);
-  const audioContextRef = useRef(null);
-  const repeatingSoundIntervalRef = useRef(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const queueRef = useRef<Date[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const repeatingSoundIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+    null,
+  );
 
   const activeVideo = useMemo(
-    () => POSTURE_VIDEO_CLIPS[currentVideoIndex],
+    () => POSTURE_VIDEO_CLIPS[currentVideoIndex] as PostureVideoClip,
     [currentVideoIndex],
   );
   const countdownLabel = useMemo(() => {
@@ -167,13 +216,13 @@ export default function App() {
   }, [isRunning, nextReminderAt, nowTick]);
 
   function clearActiveTimer() {
-    if (timerRef.current) {
+    if (timerRef.current !== null) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
   }
 
-  function stopReminders(message) {
+  function stopReminders(message?: string) {
     clearActiveTimer();
     stopRepeatingAlertSound();
     queueRef.current = [];
@@ -188,7 +237,7 @@ export default function App() {
   }
 
   function playAlertSound() {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    const AudioContextClass = getAudioContextConstructor();
     if (!AudioContextClass) {
       return;
     }
@@ -200,7 +249,7 @@ export default function App() {
     const context = audioContextRef.current;
 
     if (context.state === "suspended") {
-      context.resume();
+      void context.resume();
     }
 
     const tones = [
@@ -208,7 +257,7 @@ export default function App() {
       { frequency: 660, offset: 0.2 },
     ];
 
-    tones.forEach(({ frequency, offset }) => {
+    for (const { frequency, offset } of tones) {
       const oscillator = context.createOscillator();
       const gain = context.createGain();
       const start = context.currentTime + offset;
@@ -224,11 +273,11 @@ export default function App() {
       gain.connect(context.destination);
       oscillator.start(start);
       oscillator.stop(end);
-    });
+    }
   }
 
   function stopRepeatingAlertSound() {
-    if (repeatingSoundIntervalRef.current) {
+    if (repeatingSoundIntervalRef.current !== null) {
       clearInterval(repeatingSoundIntervalRef.current);
       repeatingSoundIntervalRef.current = null;
     }
@@ -242,70 +291,7 @@ export default function App() {
     }, 1200);
   }
 
-  function acknowledgeReminder() {
-    stopRepeatingAlertSound();
-    setIsAlertDialogOpen(false);
-    setActiveReminderLabel("");
-    scheduleNextReminder();
-  }
-
-  function refreshQueueForUpcomingWindow(referenceTime) {
-    const { error, reminders, dayStart } = createUpcomingReminderSchedule(
-      referenceTime,
-      settings.startTime,
-      settings.endTime,
-      settings.intervalMinutes,
-    );
-
-    if (error) {
-      stopReminders(error);
-      return false;
-    }
-
-    if (reminders.length === 0) {
-      stopReminders("No reminders could be scheduled.");
-      return false;
-    }
-
-    queueRef.current = reminders;
-
-    if (referenceTime < dayStart) {
-      setStatusMessage(
-        "Outside your daily window. Waiting for the next workday start.",
-      );
-    }
-
-    return true;
-  }
-
-  function triggerReminder(triggerTime) {
-    setCurrentVideoIndex((previousIndex) => nextVideoIndex(previousIndex));
-    setLastReminderTime(triggerTime);
-    setNextReminderAt(null);
-    setActiveReminderLabel(
-      triggerTime.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    );
-    setIsAlertDialogOpen(true);
-    startRepeatingAlertSound();
-
-    const timestamp = triggerTime.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    setStatusMessage(`Posture check at ${timestamp}. Opened your next video.`);
-
-    if (permissionStatus === "granted") {
-      new Notification("Posture check", {
-        body: "Time to reset your posture. Dismiss the reminder dialog to continue.",
-      });
-    }
-  }
-
-  function scheduleNextReminder() {
+  function scheduleNextReminder(): void {
     clearActiveTimer();
 
     if (queueRef.current.length === 0) {
@@ -337,6 +323,69 @@ export default function App() {
     }, delay);
   }
 
+  function acknowledgeReminder() {
+    stopRepeatingAlertSound();
+    setIsAlertDialogOpen(false);
+    setActiveReminderLabel("");
+    scheduleNextReminder();
+  }
+
+  function refreshQueueForUpcomingWindow(referenceTime: Date): boolean {
+    const result = createUpcomingReminderSchedule(
+      referenceTime,
+      settings.startTime,
+      settings.endTime,
+      settings.intervalMinutes,
+    );
+
+    if (result.error !== null) {
+      stopReminders(result.error);
+      return false;
+    }
+
+    if (result.reminders.length === 0) {
+      stopReminders("No reminders could be scheduled.");
+      return false;
+    }
+
+    queueRef.current = result.reminders;
+
+    if (referenceTime < result.dayStart) {
+      setStatusMessage(
+        "Outside your daily window. Waiting for the next workday start.",
+      );
+    }
+
+    return true;
+  }
+
+  function triggerReminder(triggerTime: Date) {
+    setCurrentVideoIndex((previousIndex) => nextVideoIndex(previousIndex));
+    setLastReminderTime(triggerTime);
+    setNextReminderAt(null);
+    setActiveReminderLabel(
+      triggerTime.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    );
+    setIsAlertDialogOpen(true);
+    startRepeatingAlertSound();
+
+    const timestamp = triggerTime.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    setStatusMessage(`Posture check at ${timestamp}. Opened your next video.`);
+
+    if (permissionStatus === "granted") {
+      new Notification("Posture check", {
+        body: "Time to reset your posture. Dismiss the reminder dialog to continue.",
+      });
+    }
+  }
+
   function handleStart() {
     const queueWasRefreshed = refreshQueueForUpcomingWindow(new Date());
     if (!queueWasRefreshed) {
@@ -359,7 +408,7 @@ export default function App() {
       return;
     }
 
-    Notification.requestPermission().then((permission) => {
+    void Notification.requestPermission().then((permission) => {
       setPermissionStatus(permission);
       if (permission === "granted") {
         setStatusMessage("Notifications enabled. You will get browser alerts.");
@@ -388,7 +437,7 @@ export default function App() {
     return () => {
       clearActiveTimer();
       if (audioContextRef.current) {
-        audioContextRef.current.close();
+        void audioContextRef.current.close();
       }
       stopRepeatingAlertSound();
     };
@@ -450,7 +499,7 @@ export default function App() {
             Interval (minutes)
             <input
               type="number"
-              min="1"
+              min={1}
               value={settings.intervalMinutes}
               onChange={(event) =>
                 setSettings((previous) => ({
