@@ -176,7 +176,6 @@ type PersistedV1 = {
   currentVideoIndex: number;
   lastReminderTimeIso: string | null;
   notifyEnabled: boolean;
-  statusMessage?: string;
 };
 
 function readPersistedState(): PersistedV1 | null {
@@ -236,6 +235,80 @@ function getAudioContextConstructor():
   return legacy;
 }
 
+let cachedBeepObjectUrl: string | null = null;
+
+/** Short PCM WAV for `<audio>` fallback when Web Audio is blocked in a background tab. */
+function buildBeepWavBlob(): Blob {
+  const sampleRate = 22050;
+  const durationSec = 0.22;
+  const frequency = 880;
+  const numSamples = Math.floor(sampleRate * durationSec);
+  const dataSize = numSamples * 2;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  let offset = 0;
+  function writeString(s: string) {
+    for (let i = 0; i < s.length; i++) {
+      view.setUint8(offset++, s.charCodeAt(i));
+    }
+  }
+
+  writeString("RIFF");
+  view.setUint32(offset, 36 + dataSize, true);
+  offset += 4;
+  writeString("WAVE");
+  writeString("fmt ");
+  view.setUint32(offset, 16, true);
+  offset += 4;
+  view.setUint16(offset, 1, true);
+  offset += 2;
+  view.setUint16(offset, 1, true);
+  offset += 2;
+  view.setUint32(offset, sampleRate, true);
+  offset += 4;
+  view.setUint32(offset, sampleRate * 2, true);
+  offset += 4;
+  view.setUint16(offset, 2, true);
+  offset += 2;
+  view.setUint16(offset, 16, true);
+  offset += 2;
+  writeString("data");
+  view.setUint32(offset, dataSize, true);
+  offset += 4;
+
+  for (let i = 0; i < numSamples; i++) {
+    const t = i / sampleRate;
+    const fade = 1 - i / numSamples;
+    const sample = Math.sin(2 * Math.PI * frequency * t) * 0.35 * fade;
+    const clipped = Math.max(-1, Math.min(1, sample));
+    view.setInt16(
+      offset,
+      Math.max(-32768, Math.min(32767, Math.round(clipped * 32767))),
+      true,
+    );
+    offset += 2;
+  }
+
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+function playHtmlAudioBeep(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    if (!cachedBeepObjectUrl) {
+      cachedBeepObjectUrl = URL.createObjectURL(buildBeepWavBlob());
+    }
+    const audio = new Audio(cachedBeepObjectUrl);
+    audio.volume = 0.45;
+    void audio.play().catch(() => {});
+  } catch {
+    // Ignore playback failures (autoplay policy, etc.).
+  }
+}
+
 export default function App() {
   const [settings, setSettings] = useState<Settings>(() =>
     mergeSettingsFromPersist(INITIAL_PERSISTED?.settings),
@@ -250,11 +323,6 @@ export default function App() {
     () => INITIAL_PERSISTED?.notifyEnabled !== false,
   );
   const [isRunning, setIsRunning] = useState(false);
-  const [statusMessage, setStatusMessage] = useState(
-    () =>
-      INITIAL_PERSISTED?.statusMessage ??
-      "Configure your day, then start reminders.",
-  );
   const [upcomingCount, setUpcomingCount] = useState(0);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(() => {
     const raw = INITIAL_PERSISTED?.currentVideoIndex;
@@ -331,7 +399,7 @@ export default function App() {
     }
   }
 
-  function stopReminders(message?: string) {
+  function stopReminders() {
     clearActiveTimer();
     stopRepeatingAlertSound();
     queueRef.current = [];
@@ -340,14 +408,34 @@ export default function App() {
     setIsAlertDialogOpen(false);
     setActiveReminderLabel("");
     setIsRunning(false);
-    if (message) {
-      setStatusMessage(message);
-    }
   }
 
-  function playAlertSound() {
+  async function unlockWebAudio(): Promise<void> {
     const AudioContextClass = getAudioContextConstructor();
     if (!AudioContextClass) {
+      return;
+    }
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContextClass();
+    }
+    const ctx = audioContextRef.current;
+    await ctx.resume().catch(() => {});
+    if (ctx.state !== "running") {
+      return;
+    }
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    g.gain.value = 0.00001;
+    osc.connect(g);
+    g.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.015);
+  }
+
+  async function playAlertSound(): Promise<void> {
+    const AudioContextClass = getAudioContextConstructor();
+    if (!AudioContextClass) {
+      playHtmlAudioBeep();
       return;
     }
 
@@ -356,32 +444,38 @@ export default function App() {
     }
 
     const context = audioContextRef.current;
+    await context.resume().catch(() => {});
 
-    if (context.state === "suspended") {
-      void context.resume();
+    if (context.state !== "running") {
+      playHtmlAudioBeep();
+      return;
     }
 
-    const tones = [
-      { frequency: 880, offset: 0 },
-      { frequency: 660, offset: 0.2 },
-    ];
+    try {
+      const tones = [
+        { frequency: 880, offset: 0 },
+        { frequency: 660, offset: 0.2 },
+      ];
 
-    for (const { frequency, offset } of tones) {
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      const start = context.currentTime + offset;
-      const end = start + 0.14;
+      for (const { frequency, offset } of tones) {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        const start = context.currentTime + offset;
+        const end = start + 0.14;
 
-      oscillator.type = "sine";
-      oscillator.frequency.value = frequency;
-      gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(0.15, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, end);
+        oscillator.type = "sine";
+        oscillator.frequency.value = frequency;
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(0.15, start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, end);
 
-      oscillator.connect(gain);
-      gain.connect(context.destination);
-      oscillator.start(start);
-      oscillator.stop(end);
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start(start);
+        oscillator.stop(end);
+      }
+    } catch {
+      playHtmlAudioBeep();
     }
   }
 
@@ -394,9 +488,9 @@ export default function App() {
 
   function startRepeatingAlertSound() {
     stopRepeatingAlertSound();
-    playAlertSound();
+    void playAlertSound();
     repeatingSoundIntervalRef.current = setInterval(() => {
-      playAlertSound();
+      void playAlertSound();
     }, 1200);
   }
 
@@ -416,7 +510,7 @@ export default function App() {
     setUpcomingCount(queueRef.current.length + (nextReminder ? 1 : 0));
 
     if (!nextReminder) {
-      stopReminders("Unable to schedule the next reminder.");
+      stopReminders();
       return;
     }
 
@@ -433,6 +527,7 @@ export default function App() {
   }
 
   function acknowledgeReminder() {
+    void unlockWebAudio();
     stopRepeatingAlertSound();
     setIsAlertDialogOpen(false);
     setActiveReminderLabel("");
@@ -449,22 +544,16 @@ export default function App() {
     );
 
     if (result.error !== null) {
-      stopReminders(result.error);
+      stopReminders();
       return false;
     }
 
     if (result.reminders.length === 0) {
-      stopReminders("No reminders could be scheduled.");
+      stopReminders();
       return false;
     }
 
     queueRef.current = result.reminders;
-
-    if (referenceTime < result.dayStart) {
-      setStatusMessage(
-        "Outside your daily window. Waiting for the next workday start.",
-      );
-    }
 
     return true;
   }
@@ -482,16 +571,11 @@ export default function App() {
     setIsAlertDialogOpen(true);
     startRepeatingAlertSound();
 
-    const timestamp = triggerTime.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    setStatusMessage(`Posture check at ${timestamp}. Opened your next video.`);
-
     if (permissionStatus === "granted" && notifyEnabled) {
       new Notification("Posture check", {
         body: "Time to reset your posture. Dismiss the reminder dialog to continue.",
+        silent: false,
+        tag: "check-it-posture",
       });
     }
   }
@@ -502,53 +586,60 @@ export default function App() {
       return;
     }
 
+    void unlockWebAudio();
+
     setLastReminderTime(null);
     setNowTick(Date.now());
     setIsRunning(true);
-    setStatusMessage(
-      "Reminders started. They run during your daily window and resume next day.",
-    );
     scheduleNextReminder();
   }
 
   function handleNotificationHeroClick() {
     if (typeof Notification === "undefined") {
       setPermissionStatus("unsupported");
-      setStatusMessage("Notifications are not supported in this browser.");
       return;
     }
 
     if (Notification.permission === "granted") {
-      setNotifyEnabled((prev) => {
-        const next = !prev;
-        setStatusMessage(
-          next
-            ? "App notifications on. You will see browser alerts for posture checks."
-            : "App notifications muted. In-page reminders and sounds still run.",
-        );
-        return next;
-      });
+      void unlockWebAudio();
+      setNotifyEnabled((prev) => !prev);
       return;
     }
 
     if (Notification.permission === "denied") {
-      setStatusMessage(
-        "Browser notifications are blocked. Change site permissions in your browser settings to enable alerts.",
-      );
       return;
     }
 
     void Notification.requestPermission().then((permission) => {
       setPermissionStatus(permission);
       if (permission === "granted") {
+        void unlockWebAudio();
         setNotifyEnabled(true);
-        setStatusMessage("Notifications enabled. You will get browser alerts.");
-      }
-      if (permission === "denied") {
-        setStatusMessage("Notifications denied. Enable them in browser settings.");
       }
     });
   }
+
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void audioContextRef.current?.resume().catch(() => {});
+      }
+    }
+    function onPointerDown() {
+      void audioContextRef.current?.resume().catch(() => {});
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("pointerdown", onPointerDown, {
+      capture: true,
+      passive: true,
+    });
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pointerdown", onPointerDown, {
+        capture: true,
+      });
+    };
+  }, []);
 
   useLayoutEffect(() => {
     const p = INITIAL_PERSISTED;
@@ -565,9 +656,6 @@ export default function App() {
     queueRef.current = dates;
     setNowTick(Date.now());
     setIsRunning(true);
-    setStatusMessage(
-      p.statusMessage ?? "Reminders resumed after you refreshed the page.",
-    );
     scheduleNextReminder();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only restore
   }, []);
@@ -596,7 +684,6 @@ export default function App() {
       currentVideoIndex,
       lastReminderTimeIso: lastReminderTime?.toISOString() ?? null,
       notifyEnabled,
-      statusMessage,
     });
   }, [
     settings,
@@ -605,7 +692,6 @@ export default function App() {
     currentVideoIndex,
     lastReminderTime,
     notifyEnabled,
-    statusMessage,
   ]);
 
   useEffect(() => {
@@ -742,7 +828,7 @@ export default function App() {
             </div>
 
             <h2 id="hero-heading" className="hero-title">
-              Steady progress, mindfully.
+              Keep that form up!
             </h2>
             <p className="hero-sub">
               Take a deep breath. Your next guided stretch is just around the corner.
@@ -768,8 +854,6 @@ export default function App() {
               </svg>
               {heroButtonLabel}
             </button>
-
-            <p className="hero-status">{statusMessage}</p>
           </section>
 
           <section className="pacing-section" aria-labelledby="pacing-title">
@@ -881,7 +965,7 @@ export default function App() {
               <button
                 type="button"
                 className="btn btn--tertiary"
-                onClick={() => stopReminders("Reminders stopped.")}
+                onClick={() => stopReminders()}
                 disabled={!isRunning}
               >
                 Stop
@@ -933,14 +1017,6 @@ export default function App() {
                 allowFullScreen
               />
             </div>
-            <p className="video-meta">
-              {lastReminderTime
-                ? `Last reminder: ${lastReminderTime.toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}`
-                : "Your next clip appears when a reminder fires."}
-            </p>
           </section>
 
           <div className="info-grid">
