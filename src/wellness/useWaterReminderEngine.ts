@@ -27,7 +27,8 @@ export type UseWaterReminderEngineArgs = {
 };
 
 /**
- * Water reminders: same daily window + interval as posture, but its own dialog/sound.
+ * Water reminders: daily window + interval from `waterPacing`, with its own
+ * dialog/sound.
  */
 export function useWaterReminderEngine({
   settings,

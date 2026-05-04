@@ -71,7 +71,6 @@ export function PostureTrackView({
         nextReminderAt={nextReminderAt}
         onStart={onStartPosture}
         onStop={onStopPosture}
-        sharedScheduleHint="These times also control hydration reminders on the Hydration tab."
       />
 
       <GuidedStretchSection video={activeVideo} />

@@ -26,19 +26,30 @@ import { usePostureReminderEngine } from "./usePostureReminderEngine";
 import { useWaterReminderEngine } from "./useWaterReminderEngine";
 
 /**
- * Top-level wellness state: which track you are viewing, shared day schedule,
+ * Top-level wellness state: which track you are viewing, day pacing per track,
  * browser notifications, posture reminders, water intake, and water reminders.
  *
  * Persistence is written in one place so juniors can follow a single save path.
  */
+function intervalSelectValueFor(pacing: Settings): string {
+  const intervalMinutesNum = Number(pacing.intervalMinutes);
+  return Number.isFinite(intervalMinutesNum) &&
+    (INTERVAL_OPTIONS as readonly number[]).includes(intervalMinutesNum)
+    ? String(intervalMinutesNum)
+    : "30";
+}
+
 export function useWellnessApp() {
   const skipNextPersistRef = useRef(true);
 
   const [activeTrack, setActiveTrack] = useState<WellnessTrack>(
     INITIAL_WELLNESS.activeTrack,
   );
-  const [settings, setSettings] = useState<Settings>(() =>
-    mergeDayPacingSettings(INITIAL_WELLNESS.dayPacing),
+  const [posturePacing, setPosturePacing] = useState<Settings>(() =>
+    mergeDayPacingSettings(INITIAL_WELLNESS.posturePacing),
+  );
+  const [waterPacing, setWaterPacing] = useState<Settings>(() =>
+    mergeDayPacingSettings(INITIAL_WELLNESS.waterPacing),
   );
 
   const [permissionStatus, setPermissionStatus] =
@@ -76,14 +87,14 @@ export function useWellnessApp() {
   );
 
   const posture = usePostureReminderEngine({
-    settings,
+    settings: posturePacing,
     initial: INITIAL_WELLNESS.posture,
     getPermission,
     getNotifyEnabled,
   });
 
   const water = useWaterReminderEngine({
-    settings,
+    settings: waterPacing,
     initial: INITIAL_WELLNESS.water,
     getPermission,
     getNotifyEnabled,
@@ -183,10 +194,11 @@ export function useWellnessApp() {
     const waterReminder = water.buildWaterReminderPersistSlice();
 
     writeWellnessPersist({
-      v: 2,
+      v: 3,
       activeTrack,
       notifyEnabled,
-      dayPacing: settings,
+      posturePacing,
+      waterPacing,
       posture: posture.buildPosturePersistSlice(),
       water: {
         ...waterReminder,
@@ -199,7 +211,8 @@ export function useWellnessApp() {
   }, [
     activeTrack,
     notifyEnabled,
-    settings,
+    posturePacing,
+    waterPacing,
     consumedMl,
     dailyGoalMl,
     consumptionDay,
@@ -213,12 +226,8 @@ export function useWellnessApp() {
     water.upcomingCount,
   ]);
 
-  const intervalMinutesNum = Number(settings.intervalMinutes);
-  const intervalSelectValue =
-    Number.isFinite(intervalMinutesNum) &&
-    (INTERVAL_OPTIONS as readonly number[]).includes(intervalMinutesNum)
-      ? String(intervalMinutesNum)
-      : "30";
+  const postureIntervalSelectValue = intervalSelectValueFor(posturePacing);
+  const waterIntervalSelectValue = intervalSelectValueFor(waterPacing);
 
   const notificationSupported = typeof Notification !== "undefined";
   const browserDenied = notificationSupported && permissionStatus === "denied";
@@ -236,14 +245,19 @@ export function useWellnessApp() {
       : "btn--hero";
 
   const windowMinutes = useMemo(
-    () => activeWindowMinutes(settings.startTime, settings.endTime, new Date()),
-    [settings.startTime, settings.endTime],
+    () =>
+      activeWindowMinutes(
+        waterPacing.startTime,
+        waterPacing.endTime,
+        new Date(),
+      ),
+    [waterPacing.startTime, waterPacing.endTime],
   );
 
   const intervalMinutesResolved = useMemo(() => {
-    const n = Number(settings.intervalMinutes);
+    const n = Number(waterPacing.intervalMinutes);
     return Math.max(1, Number.isFinite(n) ? n : 30);
-  }, [settings.intervalMinutes]);
+  }, [waterPacing.intervalMinutes]);
 
   const sipHintMl = useMemo(
     () =>
@@ -294,13 +308,16 @@ export function useWellnessApp() {
   return {
     activeTrack,
     setActiveTrack,
-    settings,
-    setSettings,
+    posturePacing,
+    setPosturePacing,
+    waterPacing,
+    setWaterPacing,
     permissionStatus,
     notifyEnabled,
     isRunning: posture.isRunning,
     upcomingCount: posture.upcomingCount,
-    intervalSelectValue,
+    postureIntervalSelectValue,
+    waterIntervalSelectValue,
     activeVideo: posture.activeVideo,
     countdownLabel: posture.countdownLabel,
     ringDashOffset: posture.ringDashOffset,

@@ -62,11 +62,9 @@ export function WaterIntentionRemindersSection({
         Daily intention
       </h2>
       <p className="pacing-section__sub">
-        Set your active hours, reminder rhythm, and daily hydration target. Drink
-        reminders use the same schedule as posture reminders.
-      </p>
-      <p className="pacing-section__hint">
-        Editing start, end, or interval here also updates the Posture tab.
+        Set your active hours, reminder rhythm, and daily hydration target. These
+        settings apply only to drink reminders; posture pacing is on the Posture
+        tab.
       </p>
 
       <PacingScheduleFields

@@ -35,9 +35,9 @@ export default function App() {
         <div className="page__inner">
           {w.activeTrack === "posture" ? (
             <PostureTrackView
-              settings={w.settings}
-              setSettings={w.setSettings}
-              intervalSelectValue={w.intervalSelectValue}
+              settings={w.posturePacing}
+              setSettings={w.setPosturePacing}
+              intervalSelectValue={w.postureIntervalSelectValue}
               isRunning={w.isRunning}
               permissionStatus={w.permissionStatus}
               notifyEnabled={w.notifyEnabled}
@@ -55,9 +55,9 @@ export default function App() {
             />
           ) : (
             <WaterTrackView
-              settings={w.settings}
-              setSettings={w.setSettings}
-              intervalSelectValue={w.intervalSelectValue}
+              settings={w.waterPacing}
+              setSettings={w.setWaterPacing}
+              intervalSelectValue={w.waterIntervalSelectValue}
               countdownLabel={w.waterCountdownLabel}
               ringDashOffset={w.waterRingDashOffset}
               heroButtonClass={w.heroButtonClass}

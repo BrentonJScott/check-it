@@ -24,12 +24,24 @@ export type WaterPersistSlice = {
   consumptionDay: string;
 };
 
-/** Current storage format (version 2). */
+/** Current storage format (version 3). */
+export type WellnessPersistV3 = {
+  v: 3;
+  activeTrack: WellnessTrack;
+  notifyEnabled: boolean;
+  /** Active hours + reminder interval for posture checks. */
+  posturePacing: Settings;
+  /** Active hours + reminder interval for drink reminders (independent of posture). */
+  waterPacing: Settings;
+  posture: PosturePersistSlice;
+  water: WaterPersistSlice;
+};
+
+/** Legacy v2: single day pacing object applied to both tracks on migration. */
 export type WellnessPersistV2 = {
   v: 2;
   activeTrack: WellnessTrack;
   notifyEnabled: boolean;
-  /** Shared “active hours” + interval used by posture and water schedules. */
   dayPacing: Settings;
   posture: PosturePersistSlice;
   water: WaterPersistSlice;
