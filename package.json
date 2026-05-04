@@ -1,0 +1,28 @@
+{
+  "name": "check-it",
+  "version": "1.0.0",
+  "description": "Simple posture reminder SPA built with React.",
+  "homepage": "https://github.com/BrentonJScott/check-it#readme",
+  "bugs": {
+    "url": "https://github.com/BrentonJScott/check-it/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BrentonJScott/check-it.git"
+  },
+  "license": "ISC",
+  "author": "BrentonJScott",
+  "type": "module",
+  "scripts": {
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "vite": "^7.1.10"
+  }
+}
