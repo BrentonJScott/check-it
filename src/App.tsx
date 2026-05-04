@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 type Settings = {
   startTime: string;
@@ -33,7 +33,7 @@ type NotificationPermissionState =
 const DEFAULT_SETTINGS: Settings = {
   startTime: "08:00",
   endTime: "16:00",
-  intervalMinutes: 30,
+  intervalMinutes: "30",
 };
 
 const POSTURE_VIDEO_CLIPS: PostureVideoClip[] = [
@@ -161,6 +161,66 @@ function formatCountdown(milliseconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+const INTERVAL_OPTIONS = [15, 20, 30, 45, 60] as const;
+
+const RING_RADIUS = 54;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+const STORAGE_KEY = "check-it-state";
+
+type PersistedV1 = {
+  v: 1;
+  settings: Settings;
+  isRunning: boolean;
+  pendingRemindersIso: string[];
+  currentVideoIndex: number;
+  lastReminderTimeIso: string | null;
+  notifyEnabled: boolean;
+  statusMessage?: string;
+};
+
+function readPersistedState(): PersistedV1 | null {
+  if (typeof window === "undefined" || !window.localStorage) {
+    return null;
+  }
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const data = JSON.parse(raw) as PersistedV1;
+    if (data.v !== 1) {
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedState(snapshot: PersistedV1): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+  } catch {
+    // Quota or private mode — ignore.
+  }
+}
+
+function mergeSettingsFromPersist(partial?: Partial<Settings>): Settings {
+  if (!partial) {
+    return DEFAULT_SETTINGS;
+  }
+  return {
+    ...DEFAULT_SETTINGS,
+    ...partial,
+    intervalMinutes: String(
+      partial.intervalMinutes ?? DEFAULT_SETTINGS.intervalMinutes,
+    ),
+  };
+}
+
+const INITIAL_PERSISTED = readPersistedState();
+
 function getAudioContextConstructor():
   | (new () => AudioContext)
   | undefined {
@@ -177,24 +237,50 @@ function getAudioContextConstructor():
 }
 
 export default function App() {
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<Settings>(() =>
+    mergeSettingsFromPersist(INITIAL_PERSISTED?.settings),
+  );
   const [permissionStatus, setPermissionStatus] =
     useState<NotificationPermissionState>(
       typeof Notification === "undefined"
         ? "unsupported"
         : Notification.permission,
     );
+  const [notifyEnabled, setNotifyEnabled] = useState(
+    () => INITIAL_PERSISTED?.notifyEnabled !== false,
+  );
   const [isRunning, setIsRunning] = useState(false);
   const [statusMessage, setStatusMessage] = useState(
-    "Configure your day, then start reminders.",
+    () =>
+      INITIAL_PERSISTED?.statusMessage ??
+      "Configure your day, then start reminders.",
   );
   const [upcomingCount, setUpcomingCount] = useState(0);
-  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
-  const [lastReminderTime, setLastReminderTime] = useState<Date | null>(null);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(() => {
+    const raw = INITIAL_PERSISTED?.currentVideoIndex;
+    if (typeof raw !== "number" || !Number.isFinite(raw)) {
+      return 0;
+    }
+    return Math.min(
+      POSTURE_VIDEO_CLIPS.length - 1,
+      Math.max(0, Math.floor(raw)),
+    );
+  });
+  const [lastReminderTime, setLastReminderTime] = useState<Date | null>(() => {
+    const iso = INITIAL_PERSISTED?.lastReminderTimeIso;
+    if (!iso) {
+      return null;
+    }
+    const parsed = new Date(iso);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  });
   const [nextReminderAt, setNextReminderAt] = useState<Date | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [isAlertDialogOpen, setIsAlertDialogOpen] = useState(false);
   const [activeReminderLabel, setActiveReminderLabel] = useState("");
+
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queueRef = useRef<Date[]>([]);
@@ -202,6 +288,7 @@ export default function App() {
   const repeatingSoundIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
     null,
   );
+  const skipNextPersistRef = useRef(true);
 
   const activeVideo = useMemo(
     () => POSTURE_VIDEO_CLIPS[currentVideoIndex] as PostureVideoClip,
@@ -214,6 +301,28 @@ export default function App() {
 
     return formatCountdown(nextReminderAt.getTime() - nowTick);
   }, [isRunning, nextReminderAt, nowTick]);
+
+  const intervalMs = useMemo(() => {
+    const minutes = Number(settings.intervalMinutes);
+    return Math.max(1, Number.isFinite(minutes) ? minutes : 30) * 60 * 1000;
+  }, [settings.intervalMinutes]);
+
+  const ringProgress = useMemo(() => {
+    if (!isRunning || !nextReminderAt) {
+      return 0;
+    }
+    const remaining = Math.max(0, nextReminderAt.getTime() - nowTick);
+    return Math.min(1, Math.max(0, 1 - remaining / intervalMs));
+  }, [isRunning, nextReminderAt, nowTick, intervalMs]);
+
+  const ringDashOffset = RING_CIRCUMFERENCE * (1 - ringProgress);
+
+  const intervalMinutesNum = Number(settings.intervalMinutes);
+  const intervalSelectValue =
+    Number.isFinite(intervalMinutesNum) &&
+    (INTERVAL_OPTIONS as readonly number[]).includes(intervalMinutesNum)
+      ? String(intervalMinutesNum)
+      : "30";
 
   function clearActiveTimer() {
     if (timerRef.current !== null) {
@@ -331,11 +440,12 @@ export default function App() {
   }
 
   function refreshQueueForUpcomingWindow(referenceTime: Date): boolean {
+    const s = settingsRef.current;
     const result = createUpcomingReminderSchedule(
       referenceTime,
-      settings.startTime,
-      settings.endTime,
-      settings.intervalMinutes,
+      s.startTime,
+      s.endTime,
+      s.intervalMinutes,
     );
 
     if (result.error !== null) {
@@ -379,7 +489,7 @@ export default function App() {
 
     setStatusMessage(`Posture check at ${timestamp}. Opened your next video.`);
 
-    if (permissionStatus === "granted") {
+    if (permissionStatus === "granted" && notifyEnabled) {
       new Notification("Posture check", {
         body: "Time to reset your posture. Dismiss the reminder dialog to continue.",
       });
@@ -401,16 +511,37 @@ export default function App() {
     scheduleNextReminder();
   }
 
-  function requestNotificationPermission() {
+  function handleNotificationHeroClick() {
     if (typeof Notification === "undefined") {
       setPermissionStatus("unsupported");
       setStatusMessage("Notifications are not supported in this browser.");
       return;
     }
 
+    if (Notification.permission === "granted") {
+      setNotifyEnabled((prev) => {
+        const next = !prev;
+        setStatusMessage(
+          next
+            ? "App notifications on. You will see browser alerts for posture checks."
+            : "App notifications muted. In-page reminders and sounds still run.",
+        );
+        return next;
+      });
+      return;
+    }
+
+    if (Notification.permission === "denied") {
+      setStatusMessage(
+        "Browser notifications are blocked. Change site permissions in your browser settings to enable alerts.",
+      );
+      return;
+    }
+
     void Notification.requestPermission().then((permission) => {
       setPermissionStatus(permission);
       if (permission === "granted") {
+        setNotifyEnabled(true);
         setStatusMessage("Notifications enabled. You will get browser alerts.");
       }
       if (permission === "denied") {
@@ -418,6 +549,74 @@ export default function App() {
       }
     });
   }
+
+  useLayoutEffect(() => {
+    const p = INITIAL_PERSISTED;
+    if (!p?.isRunning || !p.pendingRemindersIso?.length) {
+      return;
+    }
+    const dates = p.pendingRemindersIso
+      .map((iso) => new Date(iso))
+      .filter((d) => !Number.isNaN(d.getTime()) && d.getTime() > Date.now())
+      .sort((a, b) => a.getTime() - b.getTime());
+    if (dates.length === 0) {
+      return;
+    }
+    queueRef.current = dates;
+    setNowTick(Date.now());
+    setIsRunning(true);
+    setStatusMessage(
+      p.statusMessage ?? "Reminders resumed after you refreshed the page.",
+    );
+    scheduleNextReminder();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only restore
+  }, []);
+
+  useEffect(() => {
+    if (skipNextPersistRef.current) {
+      skipNextPersistRef.current = false;
+      return;
+    }
+    const now = Date.now();
+    const pending: Date[] = [];
+    if (nextReminderAt && nextReminderAt.getTime() > now) {
+      pending.push(nextReminderAt);
+    }
+    for (const d of queueRef.current) {
+      if (d.getTime() > now) {
+        pending.push(d);
+      }
+    }
+    pending.sort((a, b) => a.getTime() - b.getTime());
+    writePersistedState({
+      v: 1,
+      settings,
+      isRunning,
+      pendingRemindersIso: pending.map((d) => d.toISOString()),
+      currentVideoIndex,
+      lastReminderTimeIso: lastReminderTime?.toISOString() ?? null,
+      notifyEnabled,
+      statusMessage,
+    });
+  }, [
+    settings,
+    isRunning,
+    nextReminderAt,
+    currentVideoIndex,
+    lastReminderTime,
+    notifyEnabled,
+    statusMessage,
+  ]);
+
+  useEffect(() => {
+    function syncPermission() {
+      if (typeof Notification !== "undefined") {
+        setPermissionStatus(Notification.permission);
+      }
+    }
+    window.addEventListener("focus", syncPermission);
+    return () => window.removeEventListener("focus", syncPermission);
+  }, []);
 
   useEffect(() => {
     if (!isRunning || !nextReminderAt) {
@@ -443,8 +642,23 @@ export default function App() {
     };
   }, []);
 
+  const notificationSupported = typeof Notification !== "undefined";
+  const browserDenied = notificationSupported && permissionStatus === "denied";
+  const heroButtonDisabled = !notificationSupported || browserDenied;
+  const heroButtonLabel = !notificationSupported
+    ? "Notifications unavailable"
+    : browserDenied
+      ? "Notifications blocked"
+      : permissionStatus === "granted" && notifyEnabled
+        ? "Mute browser reminders"
+        : "Enable browser reminders";
+  const heroButtonClass =
+    permissionStatus === "granted" && notifyEnabled
+      ? "btn--hero btn--hero-muted"
+      : "btn--hero";
+
   return (
-    <main className="app-shell">
+    <>
       {isAlertDialogOpen && (
         <div className="alert-overlay" role="alertdialog" aria-modal="true">
           <div className="alert-dialog">
@@ -453,118 +667,343 @@ export default function App() {
               Your {activeReminderLabel} reminder is ready. Acknowledge this alert to
               stop the sound and continue the schedule.
             </p>
-            <button onClick={acknowledgeReminder} type="button">
+            <button
+              className="btn btn--primary btn--block"
+              onClick={acknowledgeReminder}
+              type="button"
+            >
               I checked my posture
             </button>
           </div>
         </div>
       )}
 
-      <section className="panel">
-        <h1>Check-It Posture Reminders</h1>
-        <p className="subtle">
-          Build a simple schedule and get nudges throughout your workday.
-        </p>
+      <div className="page">
+        <header className="site-header">
+          <span className="logo">Check-it</span>
+          <div className="header-actions">
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Settings (coming soon)"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden={true}
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Account (coming soon)"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden={true}
+              >
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </button>
+          </div>
+        </header>
 
-        <div className="field-grid">
-          <label>
-            Start time
-            <input
-              type="time"
-              value={settings.startTime}
-              onChange={(event) =>
-                setSettings((previous) => ({
-                  ...previous,
-                  startTime: event.target.value,
-                }))
-              }
-            />
-          </label>
+        <div className="page__inner">
+          <section className="hero-card" aria-labelledby="hero-heading">
+            <div className="timer-ring-wrap">
+              <svg viewBox="0 0 120 120" aria-hidden={true}>
+                <circle className="timer-ring__track" cx="60" cy="60" r={RING_RADIUS} />
+                <circle
+                  className="timer-ring__progress"
+                  cx="60"
+                  cy="60"
+                  r={RING_RADIUS}
+                  strokeDasharray={RING_CIRCUMFERENCE}
+                  strokeDashoffset={ringDashOffset}
+                />
+              </svg>
+              <div className="timer-ring__center">
+                <span className="timer-ring__value">{countdownLabel}</span>
+                <span className="timer-ring__kicker">Next reminder</span>
+              </div>
+            </div>
 
-          <label>
-            End time
-            <input
-              type="time"
-              value={settings.endTime}
-              onChange={(event) =>
-                setSettings((previous) => ({
-                  ...previous,
-                  endTime: event.target.value,
-                }))
-              }
-            />
-          </label>
+            <h2 id="hero-heading" className="hero-title">
+              Steady progress, mindfully.
+            </h2>
+            <p className="hero-sub">
+              Take a deep breath. Your next guided stretch is just around the corner.
+            </p>
 
-          <label>
-            Interval (minutes)
-            <input
-              type="number"
-              min={1}
-              value={settings.intervalMinutes}
-              onChange={(event) =>
-                setSettings((previous) => ({
-                  ...previous,
-                  intervalMinutes: event.target.value,
-                }))
-              }
-            />
-          </label>
+            <button
+              type="button"
+              className={heroButtonClass}
+              onClick={handleNotificationHeroClick}
+              disabled={heroButtonDisabled}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden={true}
+              >
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+              {heroButtonLabel}
+            </button>
+
+            <p className="hero-status">{statusMessage}</p>
+          </section>
+
+          <section className="pacing-section" aria-labelledby="pacing-title">
+            <h2 id="pacing-title" className="pacing-section__title">
+              How should we pace your day?
+            </h2>
+            <p className="pacing-section__sub">
+              Set your active hours and the rhythm of your reminders.
+            </p>
+
+            <div className="pacing-fields">
+              <div className="pacing-field">
+                <div className="pacing-field__row" aria-hidden={true}>
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <circle cx="12" cy="12" r="5" />
+                    <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2" />
+                  </svg>
+                  <span className="pacing-field__label">Start time</span>
+                </div>
+                <input
+                  type="time"
+                  className="pacing-field__time"
+                  value={settings.startTime}
+                  onChange={(event) =>
+                    setSettings((previous) => ({
+                      ...previous,
+                      startTime: event.target.value,
+                    }))
+                  }
+                  aria-label="Start time"
+                />
+              </div>
+
+              <div className="pacing-field">
+                <div className="pacing-field__row" aria-hidden={true}>
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                  </svg>
+                  <span className="pacing-field__label">End time</span>
+                </div>
+                <input
+                  type="time"
+                  className="pacing-field__time"
+                  value={settings.endTime}
+                  onChange={(event) =>
+                    setSettings((previous) => ({
+                      ...previous,
+                      endTime: event.target.value,
+                    }))
+                  }
+                  aria-label="End time"
+                />
+              </div>
+
+              <div className="pacing-field">
+                <div className="pacing-field__row" aria-hidden={true}>
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                  <span className="pacing-field__label">Interval</span>
+                </div>
+                <div className="pacing-field__value">
+                  <select
+                    className="pacing-field__select"
+                    value={intervalSelectValue}
+                    onChange={(event) =>
+                      setSettings((previous) => ({
+                        ...previous,
+                        intervalMinutes: event.target.value,
+                      }))
+                    }
+                    aria-label="Reminder interval"
+                  >
+                    {INTERVAL_OPTIONS.map((m) => (
+                      <option key={m} value={m}>
+                        {m} mins
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="pacing-actions">
+              <button
+                type="button"
+                className="btn btn--primary"
+                onClick={handleStart}
+                disabled={isRunning}
+              >
+                {isRunning ? "Reminders on" : "Start reminders"}
+              </button>
+              <button
+                type="button"
+                className="btn btn--tertiary"
+                onClick={() => stopReminders("Reminders stopped.")}
+                disabled={!isRunning}
+              >
+                Stop
+              </button>
+            </div>
+
+            <p className="pacing-meta">
+              Browser permission: <strong>{permissionStatus}</strong>
+              {" · "}
+              App alerts:{" "}
+              <strong>
+                {permissionStatus === "granted"
+                  ? notifyEnabled
+                    ? "on"
+                    : "muted"
+                  : "—"}
+              </strong>
+              {isRunning ? (
+                <>
+                  {" "}
+                  · Upcoming: <strong>{upcomingCount}</strong>
+                  {nextReminderAt ? (
+                    <>
+                      {" "}
+                      · Next at{" "}
+                      <strong>
+                        {nextReminderAt.toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })}
+                      </strong>
+                    </>
+                  ) : null}
+                </>
+              ) : null}
+            </p>
+          </section>
+
+          <section className="video-card" aria-labelledby="video-heading">
+            <h2 id="video-heading">Guided stretch</h2>
+            <p className="subtle">{activeVideo.title}</p>
+            <div className="video-wrap">
+              <iframe
+                key={activeVideo.id}
+                title={activeVideo.title}
+                src={activeVideo.embedUrl}
+                allow="autoplay; encrypted-media; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+            <p className="video-meta">
+              {lastReminderTime
+                ? `Last reminder: ${lastReminderTime.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}`
+                : "Your next clip appears when a reminder fires."}
+            </p>
+          </section>
+
+          <div className="info-grid">
+            <article className="info-card info-card--secondary">
+              <h3 className="info-card__title">Daily consistency</h3>
+              <p className="info-card__text">
+                {isRunning
+                  ? `${upcomingCount} posture check${upcomingCount === 1 ? "" : "s"} queued in your current window.`
+                  : "Start reminders during your active hours to build a steady desk routine."}
+              </p>
+              <div className="info-card__icon" aria-hidden={true}>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                </svg>
+              </div>
+            </article>
+            <article className="info-card info-card--tertiary">
+              <h3 className="info-card__title">Mindful moments</h3>
+              <p className="info-card__text">
+                {POSTURE_VIDEO_CLIPS.length}+ short clips, rotated each time you
+                acknowledge a reminder.
+              </p>
+              <div className="info-card__icon" aria-hidden={true}>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M12 3c-1.2 4-4 5-7 5v11h14V8c-3 0-5.8-1-7-5z" />
+                  <path d="M8 21v-6M16 21v-6" />
+                </svg>
+              </div>
+            </article>
+          </div>
         </div>
 
-        <div className="button-row">
-          <button onClick={requestNotificationPermission} type="button">
-            Enable notifications
-          </button>
-          <button onClick={handleStart} type="button">
-            Start reminders
-          </button>
-          <button onClick={() => stopReminders("Reminders stopped.")} type="button">
-            Stop
-          </button>
-        </div>
-
-        <p className="status">Status: {statusMessage}</p>
-        <p className="meta">
-          Notification permission: <strong>{permissionStatus}</strong> | Running:{" "}
-          <strong>{isRunning ? "yes" : "no"}</strong> | Upcoming reminders:{" "}
-          <strong>{upcomingCount}</strong>
-        </p>
-        <p className="meta">
-          Next reminder:{" "}
-          <strong>
-            {nextReminderAt
-              ? nextReminderAt.toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                })
-              : "--"}
-          </strong>{" "}
-          | Countdown: <strong>{countdownLabel}</strong>
-        </p>
-      </section>
-
-      <section className="panel">
-        <h2>Current posture video</h2>
-        <p className="subtle">{activeVideo.title}</p>
-        <div className="video-wrap">
-          <iframe
-            key={activeVideo.id}
-            title={activeVideo.title}
-            src={activeVideo.embedUrl}
-            allow="autoplay; encrypted-media; picture-in-picture"
-            allowFullScreen
-          />
-        </div>
-        <p className="meta">
-          {lastReminderTime
-            ? `Last reminder: ${lastReminderTime.toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}`
-            : "No reminder has fired yet."}
-        </p>
-      </section>
-    </main>
+        <footer className="site-footer">
+          <nav className="site-footer__links" aria-label="Footer">
+            <a href="#">Privacy</a>
+            <a
+              href="https://github.com/BrentonJScott/check-it/issues"
+              rel="noreferrer"
+            >
+              Help center
+            </a>
+            <a
+              href="https://github.com/BrentonJScott/check-it#readme"
+              rel="noreferrer"
+            >
+              Science
+            </a>
+          </nav>
+          <p className="site-footer__copy">
+            © {new Date().getFullYear()} Check-it · Posture reminders
+          </p>
+        </footer>
+      </div>
+    </>
   );
 }
