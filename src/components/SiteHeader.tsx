@@ -1,7 +1,16 @@
+import logoMark from "../assets/images/logo-vert.svg";
+
 export function SiteHeader() {
   return (
     <header className="site-header">
-      <span className="logo">Check-it</span>
+      <img
+        className="logo"
+        src={logoMark}
+        alt="Check-it"
+        width={184}
+        height={50}
+        decoding="async"
+      />
       <div className="header-actions">
         <button
           type="button"
