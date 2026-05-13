@@ -49,9 +49,28 @@ export function createUpcomingReminderSchedule(
       baseTime = fromTime < dayStart ? dayStart : fromTime;
     }
 
-    const firstReminder = new Date(baseTime.getTime() + intervalMs);
+    let firstReminder = new Date(baseTime.getTime() + intervalMs);
+
+    /**
+     * If `now + interval` lands past the end of today's window, the naive code
+     * skipped the entire day and jumped to tomorrow — e.g. stop/start near the
+     * end of active hours showed a ~17h countdown. When we're still inside the
+     * window, use the next slot on the day grid (`dayStart + n * interval`) that
+     * is still on or before `dayEnd`.
+     */
     if (firstReminder > dayEnd) {
-      continue;
+      if (dayOffset === 0 && fromTime < dayEnd) {
+        let aligned = new Date(dayStart.getTime() + intervalMs);
+        while (aligned <= fromTime && aligned <= dayEnd) {
+          aligned = new Date(aligned.getTime() + intervalMs);
+        }
+        if (aligned > dayEnd) {
+          continue;
+        }
+        firstReminder = aligned;
+      } else {
+        continue;
+      }
     }
 
     const reminders: Date[] = [];

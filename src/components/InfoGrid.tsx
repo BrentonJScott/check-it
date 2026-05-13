@@ -29,8 +29,7 @@ export function InfoGrid({ isRunning, upcomingCount }: InfoGridProps) {
       <article className="info-card info-card--tertiary">
         <h3 className="info-card__title">Mindful moments</h3>
         <p className="info-card__text">
-          {POSTURE_VIDEO_CLIPS.length}+ short clips, rotated each time you
-          acknowledge a reminder.
+          {`${POSTURE_VIDEO_CLIPS.length}+ short videos (full clips, not trimmed), rotated each time you acknowledge a reminder.`}
         </p>
         <div className="info-card__icon" aria-hidden={true}>
           <svg
